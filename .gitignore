@@ -1,0 +1,12 @@
+__pycache__/
+*.py[cod]
+
+build/
+dist/
+*.spec
+
+cpp/*.a
+cpp/fs_backend.dll
+releases/
+plugins/
+fsclient-src.zip
