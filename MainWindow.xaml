@@ -1,0 +1,285 @@
+<Window x:Class="FsClient.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:FsClient"
+        Title="fsclient 1.1.0" Width="1200" Height="800" MinWidth="1080" MinHeight="720"
+        WindowStartupLocation="CenterScreen"
+        Background="{StaticResource BgMain}"
+        Foreground="{StaticResource TextPrimary}"
+        FontFamily="Segoe UI" FontSize="13"
+        Closing="Window_Closing">
+
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="230" />
+            <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
+
+        <!-- Боковая панель -->
+        <Border Grid.Column="0" Background="{StaticResource BgSidebar}">
+            <Grid Margin="12,18,12,16">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="58" />
+                    <RowDefinition Height="58" />
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="36" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <TextBlock Grid.Row="0" Text="ПРОДУКТЫ" Margin="8,0,0,12"
+                           FontSize="10" FontWeight="Bold" Foreground="{StaticResource TextMuted}" />
+
+                <local:FrostedBorder x:Name="ZapretCard" Grid.Row="1" CornerRadius="10"
+                                     BlurSource="{Binding ElementName=BlurSource}"
+                                     Tint="#73141320" FrostBorderBrush="#24FFFFFF"
+                                     Cursor="Hand" MouseLeftButtonUp="ZapretCard_Click">
+                    <Grid Margin="12,9,10,9">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="24" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="24" />
+                        </Grid.ColumnDefinitions>
+                        <Path Data="M13 2 L5 13 H11 L9 22 L19 10 H13 Z"
+                              Fill="{StaticResource TextPrimary}" Width="20" Height="20"
+                              HorizontalAlignment="Left" VerticalAlignment="Center" Stretch="Uniform" />
+                        <StackPanel Grid.Column="1" Margin="10,0,0,0" VerticalAlignment="Center">
+                            <TextBlock Text="Zapret" FontSize="13" FontWeight="SemiBold"
+                                       Foreground="{StaticResource TextPrimary}" />
+                            <StackPanel Orientation="Horizontal" Margin="0,3,0,0">
+                                <Ellipse x:Name="ZapretDot" Width="8" Height="8" Margin="0,0,6,0"
+                                         Fill="{StaticResource TextMuted}" VerticalAlignment="Center" />
+                                <TextBlock x:Name="ZapretStatus" Text="Не скачано" FontSize="11"
+                                           Foreground="{StaticResource TextMuted}" />
+                            </StackPanel>
+                        </StackPanel>
+                        <Button x:Name="ZapretMenuButton" Grid.Column="2" Content="⋯"
+                                Width="24" Height="24" Padding="0" FontSize="16"
+                                Foreground="{StaticResource TextSecondary}"
+                                Style="{StaticResource PillButton}" HorizontalContentAlignment="Center"
+                                Click="ZapretMenuButton_Click">
+                            <Button.ContextMenu>
+                                <ContextMenu Background="#1C192B" BorderBrush="#1AFFFFFF" BorderThickness="1">
+                                    <MenuItem Header="Открыть папку" Click="MenuOpenFolder_Click" />
+                                    <MenuItem Header="Проверить обновления" Click="MenuCheckUpdates_Click" />
+                                    <MenuItem Header="Настройки" Click="MenuSettings_Click" />
+                                </ContextMenu>
+                            </Button.ContextMenu>
+                        </Button>
+                    </Grid>
+                </local:FrostedBorder>
+
+                <local:FrostedBorder x:Name="TgCard" Grid.Row="2" CornerRadius="10"
+                                     BlurSource="{Binding ElementName=BlurSource}"
+                                     Tint="#73141320" FrostBorderBrush="#24FFFFFF"
+                                     Cursor="Hand" MouseLeftButtonUp="TgCard_Click">
+                    <Grid Margin="12,9,10,9">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="24" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Path Data="M12 3 V12 M6 11 A7 7 0 0 0 18 11 M6 11 V17 A3 3 0 0 0 12 17 V11"
+                              Stroke="{StaticResource TextSecondary}" StrokeThickness="1.8"
+                              Width="20" Height="20" HorizontalAlignment="Left"
+                              VerticalAlignment="Center" Stretch="Uniform" />
+                        <StackPanel Grid.Column="1" Margin="10,0,0,0" VerticalAlignment="Center">
+                            <TextBlock Text="TG-WS-Proxy" FontSize="13" FontWeight="SemiBold"
+                                       Foreground="{StaticResource TextPrimary}" />
+                            <TextBlock Text="В разработке" FontSize="11" Margin="0,3,0,0"
+                                       Foreground="{StaticResource TextMuted}" />
+                        </StackPanel>
+                    </Grid>
+                </local:FrostedBorder>
+
+                <Button Grid.Row="4" Content="  GitHub Flowseal" Style="{StaticResource PillButton}"
+                        HorizontalAlignment="Stretch" Height="36" Click="GitHub_Click" />
+
+                <TextBlock Grid.Row="5" Text="fsclient v1.1.0" FontSize="10"
+                           Foreground="#4A4558" Margin="10,8,0,0" />
+            </Grid>
+        </Border>
+
+        <!-- Правая область -->
+        <Grid Grid.Column="1">
+            <!-- Скрытый слой: размытая копия фона для матового стекла -->
+            <Grid x:Name="BlurHost" IsHitTestVisible="False">
+                <Image x:Name="BlurSource"
+                       Source="pack://application:,,,/assets/background.jpg"
+                       Stretch="UniformToFill">
+                    <Image.Effect>
+                        <BlurEffect Radius="18" />
+                    </Image.Effect>
+                </Image>
+            </Grid>
+
+            <Image Source="pack://application:,,,/assets/background.jpg"
+                   Stretch="UniformToFill" IsHitTestVisible="False" />
+            <Rectangle Fill="{StaticResource OverlayBrush}" IsHitTestVisible="False" />
+
+            <!-- Страница Zapret -->
+            <Grid x:Name="ZapretPage">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="160" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+
+                <Grid Grid.Row="0" Margin="32,20,32,10">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+                    <StackPanel Orientation="Horizontal">
+                        <Border Style="{StaticResource Badge}">
+                            <TextBlock Text="FLOWSEAL EDITION" FontSize="10" FontWeight="SemiBold"
+                                       Foreground="#EBFFFFFF" />
+                        </Border>
+                        <Border Style="{StaticResource Badge}" Margin="8,0,0,0">
+                            <TextBlock Text="DPI BYPASS" FontSize="10" FontWeight="SemiBold"
+                                       Foreground="#EBFFFFFF" />
+                        </Border>
+                    </StackPanel>
+
+                    <StackPanel Grid.Row="1" Orientation="Horizontal" VerticalAlignment="Center">
+                        <Border Width="52" Height="52" CornerRadius="12">
+                            <Border.Background>
+                                <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                    <GradientStop Color="#DC7C5CFF" Offset="0" />
+                                    <GradientStop Color="#DCA64B63" Offset="1" />
+                                </LinearGradientBrush>
+                            </Border.Background>
+                            <Path Data="M13 2 L5 13 H11 L9 22 L19 10 H13 Z"
+                                  Fill="White" Width="30" Height="30" Stretch="Uniform" />
+                        </Border>
+                        <StackPanel Margin="14,0,0,0" VerticalAlignment="Center">
+                            <TextBlock Text="Zapret" FontSize="32" FontWeight="ExtraBold"
+                                       Foreground="White" />
+                            <TextBlock Margin="0,4,0,0" FontSize="12.5" TextWrapping="Wrap"
+                                       Foreground="#D9FFFFFF"
+                                       Text="Инструмент обхода блокировок Discord и YouTube. Выберите релиз и запустите нужную стратегию в один клик." />
+                        </StackPanel>
+                    </StackPanel>
+                </Grid>
+
+                <StackPanel Grid.Row="1" Margin="32,0,32,8">
+                    <StackPanel Orientation="Horizontal">
+                        <Button x:Name="MainButton" Style="{StaticResource AccentButton}"
+                                Width="220" Click="MainButton_Click">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <Path x:Name="MainIcon" Width="18" Height="18" Margin="0,0,10,0"
+                                      Fill="White" Stretch="Uniform" VerticalAlignment="Center"
+                                      Data="M12 4 V16 M7 12 L12 17 L17 12 M5 20 H19" />
+                                <TextBlock x:Name="MainButtonText" Grid.Column="1" Text="Скачать"
+                                           VerticalAlignment="Center" Foreground="White" />
+                            </Grid>
+                        </Button>
+
+                        <ComboBox x:Name="ReleaseCombo" Style="{StaticResource DarkCombo}"
+                                  Margin="12,0,0,0" SelectionChanged="ReleaseCombo_SelectionChanged">
+                            <ComboBox.ItemTemplate>
+                                <DataTemplate>
+                                    <TextBlock Text="{Binding Display}" FontSize="12"
+                                               Foreground="{StaticResource TextPrimary}" />
+                                </DataTemplate>
+                            </ComboBox.ItemTemplate>
+                        </ComboBox>
+
+                        <local:FrostedButton x:Name="FolderButton"
+                                 BlurSource="{Binding ElementName=BlurSource}"
+                                 Tint="#73141320" FrostBorderBrush="#24FFFFFF"
+                                 Width="56" Height="56" Margin="12,0,0,0" Click="FolderButton_Click"
+                                 ToolTip="Открыть папку релиза">
+                            <Path Data="M4 7 H10 L12 9 H21 V19 H4 Z" Width="22" Height="22"
+                                  Stroke="{StaticResource TextPrimary}" StrokeThickness="1.8"
+                                  Stretch="Uniform" />
+                        </local:FrostedButton>
+
+                        <local:FrostedButton x:Name="StopButton"
+                                BlurSource="{Binding ElementName=BlurSource}"
+                                Tint="#73141320" FrostBorderBrush="#24FFFFFF"
+                                Width="150" Height="56" Margin="12,0,0,0" Visibility="Collapsed"
+                                Click="StopButton_Click">
+                            <StackPanel Orientation="Horizontal">
+                                <Path Data="M8 8 H20 V20 H8 Z" Width="16" Height="16"
+                                      Fill="{StaticResource TextPrimary}" Stretch="Uniform" />
+                                <TextBlock Text="Остановить" Margin="8,0,0,0" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </local:FrostedButton>
+                    </StackPanel>
+
+                    <Border x:Name="ProgressPanel" Visibility="Collapsed" Margin="0,10,0,0">
+                        <StackPanel>
+                            <local:RoundedProgressBar x:Name="DownloadProgress"
+                                                      Minimum="0" Maximum="100" />
+                            <TextBlock x:Name="ProgressLabel" Text="Скачивание..." Margin="0,6,0,0"
+                                       FontSize="11" Foreground="{StaticResource TextSecondary}" />
+                        </StackPanel>
+                    </Border>
+
+                    <local:FrostedBorder Height="44" CornerRadius="12" Margin="0,10,0,0"
+                                         BlurSource="{Binding ElementName=BlurSource}"
+                                         Tint="#73141320" FrostBorderBrush="#24FFFFFF">
+                        <Grid>
+                            <Ellipse x:Name="ConsoleDot" Width="8" Height="8" Margin="20,0,0,0"
+                                     Fill="{StaticResource TextMuted}" HorizontalAlignment="Left" />
+                            <TextBlock x:Name="ConsoleText" Text="Ожидание..." Margin="38,0,16,0"
+                                       FontFamily="Consolas" FontSize="10" Foreground="#B8B2CC"
+                                       VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                        </Grid>
+                    </local:FrostedBorder>
+
+                    <TabControl Height="44" Margin="0,10,0,0" Background="Transparent">
+                        <TabItem Header="Плагины" />
+                        <TabItem Header="Сборки" />
+                    </TabControl>
+                </StackPanel>
+
+                <Grid Grid.Row="2" Margin="32,20,32,16">
+                    <local:FrostedBorder Style="{StaticResource DevCard}"
+                                         BlurSource="{Binding ElementName=BlurSource}"
+                                         HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <TextBlock Text="В разработке" FontSize="16" FontWeight="SemiBold"
+                                   Foreground="{StaticResource TextSecondary}"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </local:FrostedBorder>
+                </Grid>
+            </Grid>
+
+            <!-- Заглушка TG-WS-Proxy -->
+            <Grid x:Name="PlaceholderPage" Visibility="Collapsed">
+                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                    <Border CornerRadius="10" Background="#1FFBBF24" BorderBrush="#4DFBBF24"
+                            BorderThickness="1" Padding="10,4" HorizontalAlignment="Center">
+                        <TextBlock Text="В РАЗРАБОТКЕ" FontSize="11" FontWeight="Bold"
+                                   Foreground="#FBBF24" />
+                    </Border>
+                    <TextBlock Text="TG-WS-Proxy" FontSize="34" FontWeight="ExtraBold"
+                               Foreground="{StaticResource TextPrimary}" Margin="0,14,0,0"
+                               HorizontalAlignment="Center" />
+                    <TextBlock FontSize="14" Foreground="{StaticResource TextSecondary}"
+                               Margin="0,12,0,0" HorizontalAlignment="Center" TextAlignment="Center">
+                        <Run Text="Скоро будет доступно" />
+                        <LineBreak />
+                        <Run Text="Прокси-сервер через Telegram WebSocket" />
+                    </TextBlock>
+                </StackPanel>
+            </Grid>
+        </Grid>
+
+        <!-- Интро FSCLIENT -->
+        <Grid x:Name="SplashOverlay" Grid.ColumnSpan="2" Panel.ZIndex="1000" Visibility="Visible">
+            <Grid.Background>
+                <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                    <GradientStop Color="#141220" Offset="0" />
+                    <GradientStop Color="#0E0D15" Offset="1" />
+                </LinearGradientBrush>
+            </Grid.Background>
+            <StackPanel x:Name="SplashLetters" Orientation="Horizontal"
+                        HorizontalAlignment="Center" VerticalAlignment="Center" />
+        </Grid>
+    </Grid>
+</Window>

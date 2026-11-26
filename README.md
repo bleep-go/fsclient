@@ -1,56 +1,110 @@
-# fsclient
+# fsclient 1.1.0
 
 ![fsclient](assets/fsclient.png)
 
-PyQt6-лаунчер для стратегий zapret с нативным C++ бэкендом.
+Лаунчер стратегий **zapret** на C# / WPF с нативным C++-бэкендом.
+Python-версия больше не используется — фронтенд полностью переписан на C#.
 
-## Скачать
+## Суть программы
 
-- **Готовый EXE:** вкладка [Releases](https://github.com/bleep-go/fsclient/releases/latest) → `fsclient.exe`.
-  Прямая ссылка: `https://github.com/bleep-go/fsclient/releases/latest/download/fsclient.exe`
-- **Исходники:** кнопка `Code → Download ZIP` на главной странице репозитория
-  или `git clone https://github.com/bleep-go/fsclient.git`.
+`fsclient` — это оболочка над проектом [Flowseal/zapret-discord-youtube](https://github.com/Flowseal/zapret-discord-youtube).
+Она скачивает готовые релизы zapret, показывает список версий и стратегий,
+запускает выбранную стратегию `winws.exe` или устанавливает её как службу,
+а также показывает состояние обхода в мини-консоли.
 
-EXE уже содержит DLL и ресурсы внутри, запрашивает права администратора через
-UAC при запуске и не показывает консоль `winws.exe` на панели задач.
+**Все релизы скачиваются с оригинального репозитория
+[Flowseal/zapret-discord-youtube](https://github.com/Flowseal/zapret-discord-youtube/releases).**
+Этот проект не хранит и не перепаковывает бинарники zapret — он только
+загружает официальные релизы через GitHub API и распаковывает их в папку
+`releases\` рядом с распакованным приложением
+(`%LOCALAPPDATA%\fsclient\1.1.0\app`).
 
-## Запуск из исходников
+### Что умеет
 
-Нужен Python 3.10+ с `PyQt6` и компилятор MinGW-w64 (`g++`).
+- Список актуальных релизов с GitHub + резервные теги `v1.10.0`–`v1.10.4`.
+- Скачивание и распаковка релиза с прогресс-баром.
+- Выбор стратегии и запуск через `winws.exe` без окна консоли.
+- Установка / замена / удаление службы zapret.
+- Опрос состояния каждые 1.8 с, кнопка «Стоп», мини-консоль вывода.
+- Матовое стекло, плавный прогресс, анимации и кастомное меню в трее.
+- Сворачивание в трей при закрытии окна.
+
+## Требования
+
+- Windows **x64**.
+- **.NET 10 Desktop Runtime** (не SDK, именно Desktop Runtime).
+- Права администратора: WinDivert и работа со службой требуют elevate.
+
+Если .NET 10 не установлен, `fsclient.exe` покажет сообщение и сразу откроет
+[официальную страницу скачивания](https://dotnet.microsoft.com/download/dotnet/10.0).
+Проверка сделана нативным кодом до запуска WPF-приложения — сам .NET в EXE
+не вшит.
+
+## Запуск
+
+Это **один файл**. Достаточно `dist\fsclient.exe` — рядом ничего класть не нужно:
 
 ```bat
-pip install PyQt6
+dist\fsclient.exe
+```
+
+При запуске лаунчер распаковывает встроенное приложение в
+`%LOCALAPPDATA%\fsclient\1.1.0\app\` и запускает его оттуда. EXE сам запросит
+права администратора через UAC.
+
+Для разработки (нужен .NET SDK 10 и уже собранная `cpp\fs_backend.dll`):
+
+```bat
+dotnet run
+```
+
+## Сборка
+
+Нужны:
+
+- **.NET SDK 10**;
+- **MinGW-w64** (`g++`, `windres`) — ищется в `PATH`, либо в WinGet-пакете
+  `BrechtSanders.WinLibs.POSIX.UCRT`.
+
+Из корня репозитория:
+
+```bat
 build.bat
-python main.py
 ```
 
-`build.bat` сам ищет `g++` в `PATH`, а при отсутствии — в WinGet-пакете
-`BrechtSanders.WinLibs.POSIX.UCRT`. Результат: `cpp\fs_backend.dll`.
+Скрипт последовательно:
 
-## Сборка EXE
+1. Компилирует `cpp\backend.cpp` → `cpp\fs_backend.dll`.
+2. Публикует framework-dependent приложение во временную папку `build-publish\`.
+3. Вшивает все файлы приложения ресурсами в `launcher.cpp` и собирает
+   единственный `dist\fsclient.exe` — с проверкой .NET 10 и переходом на
+   официальный сайт, если runtime отсутствует.
 
-```bat
-pip install pyinstaller
-build_exe.bat
+Результат — один `dist\fsclient.exe` для публикации в релизе.
+
+## Структура
+
+```text
+launcher.cpp                    Единый EXE: проверка .NET 10 и распаковка приложения
+App.xaml(.cs)                   Запуск, single instance, тема
+MainWindow.xaml(.cs)            Интерфейс, трей, логика состояний
+Backend.cs                      P/Invoke, GitHub API, стратегии и служба
+BundledResources.cs             Резервная распаковка DLL/иконки
+DarkTrayMenuRenderer.cs         Кастомное меню в трее
+FrostedControls.cs              Матовое стекло и плавный скруглённый прогресс
+Styles.xaml                     Палитра и стили
+StrategyDialog / ConfirmDialog  Модальные окна
+app.manifest                    Права администратора, DPI
+fsclient.csproj                 Проект .NET 10 WPF (версия 1.1.0)
+cpp/                            Исходники бэкенда (DLL создаётся сборкой)
+assets/                         Фон, иконка, скриншот
+build.bat                       Сборка DLL, публикация и единого EXE
+dist/                           Один fsclient.exe (не хранится в git)
+CHANGELOG.md                    Список изменений для релиза
 ```
-
-Скрипт пересобирает DLL и создаёт `dist\fsclient.exe` (onefile, без консоли,
-с манифестом `requireAdministrator` и иконкой `assets\fsclient.ico`).
-
-Папки `releases\` и `plugins\` создаются рядом с EXE при первом запуске.
-
-## Как это работает
-
-- Состояние системы (`winws.exe` / служба `zapret`) опрашивается каждые 1.8 с.
-- Повторный запуск поверх активного обхода блокируется.
-- Командная строка `winws.exe` извлекается из `.bat` стратегии и запускается
-  напрямую с `CREATE_NO_WINDOW` — без `cmd.exe` и без окна в панели задач.
-- Вывод процесса передаётся в мини-консоль лаунчера через pipe.
-- Управление службой: установка, запуск, остановка, удаление.
 
 ## Что не лежит в репозитории
 
-`dist/`, `build/`, `__pycache__/`, `*.spec`, `cpp/*.a`, `cpp/fs_backend.dll`,
-`releases/`, `plugins/` — генерируется локально или скачивается лаунчером.
-
-`backend_mock.py` оставлен только как справочник по старому API и не импортируется.
+`bin/`, `obj/`, `dist/`, `build-publish/`, `launcher.rc`, `launcher.res`,
+`cpp/*.a`, `cpp/fs_backend.dll`, `releases/`, `plugins/` — генерируется
+локально или скачивается лаунчером.
