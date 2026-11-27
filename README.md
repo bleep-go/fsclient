@@ -1,4 +1,4 @@
-# fsclient 1.3.0
+# fsclient 1.3.1
 
 ![fsclient](assets/fsclient.png)
 
