@@ -1,0 +1,15 @@
+# Сборка
+bin/
+obj/
+dist/
+build-publish/
+launcher.rc
+launcher.res
+
+# Артефакты C++ бэкенда
+cpp/*.a
+cpp/fs_backend.dll
+
+# Данные, создаваемые лаунчером
+releases/
+plugins/
