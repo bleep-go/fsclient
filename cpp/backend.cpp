@@ -534,7 +534,10 @@ bool service_binary_belongs_to_zapret(SC_HANDLE service) {
         return false;
     }
     std::wstring path = config->lpBinaryPathName ? config->lpBinaryPathName : L"";
-    return contains_ci(path, L"zapret") || contains_ci(path, L"winws");
+    // Служба WinDivert может быть создана из drivers\WinDivert64.sys —
+    // в пути нет ни "zapret", ни "winws", но это всё тот же стек zapret.
+    return contains_ci(path, L"zapret") || contains_ci(path, L"winws") ||
+           contains_ci(path, L"windivert");
 }
 
 std::wstring service_binary_path(const wchar_t *name) {
@@ -1236,6 +1239,8 @@ FS_API int FS_CALL fs_get_installed_service(char *out, int out_len) {
     return FS_OK;
 }
 
+bool cleanup_windivert_services();
+
 FS_API int FS_CALL fs_run_strategy(const wchar_t *dir, const wchar_t *bat) {
     if (!g_initialized.load()) {
         set_error("Бэкенд не инициализирован.");
@@ -1274,6 +1279,12 @@ FS_API int FS_CALL fs_run_strategy(const wchar_t *dir, const wchar_t *bat) {
         set_error("Установлена служба zapret. Удалите её перед запуском "
                   "обычного процесса.");
         return FS_ERR_SERVICE_INSTALLED;
+    }
+
+    // После службы zapret может остаться служба WinDivert, которая держит
+    // фильтр. Без её удаления standalone winws падает с кодом 10.
+    if (cleanup_windivert_services()) {
+        Sleep(1000);
     }
 
     std::wstring directory(dir);
@@ -1430,6 +1441,7 @@ FS_API int FS_CALL fs_stop_strategy(void) {
     if (service_exists(L"zapret")) {
         stop_service_internal(L"zapret");
     }
+    cleanup_windivert_services();
     emit_state(FS_STATE_IDLE, std::string());
     set_error("");
     return FS_OK;
@@ -1530,6 +1542,38 @@ FS_API int FS_CALL fs_install_service(const wchar_t *dir, const wchar_t *bat) {
     return FS_OK;
 }
 
+// Помощнические службы WinDivert остаются после установки службы zapret.
+// Пока они запущены, обычный winws.exe не может открыть фильтр и падает
+// с "windivert: error opening filter: The object is referenced...".
+bool cleanup_windivert_services() {
+    static const wchar_t *helpers[] = {L"WinDivert", L"WinDivert14"};
+    bool removed = false;
+
+    SC_HANDLE scm = OpenSCManagerW(nullptr, nullptr, SC_MANAGER_CONNECT);
+    if (!scm) {
+        return false;
+    }
+    for (const wchar_t *name : helpers) {
+        SC_HANDLE service = OpenServiceW(
+            scm, name, SERVICE_QUERY_CONFIG | SERVICE_STOP | DELETE
+        );
+        if (!service) {
+            continue;
+        }
+        bool belongs = service_binary_belongs_to_zapret(service);
+        if (belongs) {
+            stop_service_internal(name);
+            DeleteService(service);
+            emit_log(0, std::string("Удалена вспомогательная служба: ") +
+                           to_utf8(name));
+            removed = true;
+        }
+        CloseServiceHandle(service);
+    }
+    CloseServiceHandle(scm);
+    return removed;
+}
+
 FS_API int FS_CALL fs_remove_service(void) {
     if (!g_initialized.load()) {
         set_error("Бэкенд не инициализирован.");
@@ -1546,27 +1590,7 @@ FS_API int FS_CALL fs_remove_service(void) {
         emit_log(0, "Служба zapret удалена");
     }
 
-    static const wchar_t *helpers[] = {L"WinDivert", L"WinDivert14"};
-    SC_HANDLE scm = OpenSCManagerW(nullptr, nullptr, SC_MANAGER_CONNECT);
-    if (scm) {
-        for (const wchar_t *name : helpers) {
-            SC_HANDLE service = OpenServiceW(
-                scm, name, SERVICE_QUERY_CONFIG | SERVICE_STOP | DELETE
-            );
-            if (!service) {
-                continue;
-            }
-            bool belongs = service_binary_belongs_to_zapret(service);
-            if (belongs) {
-                stop_service_internal(name);
-                DeleteService(service);
-                emit_log(0, std::string("Удалена вспомогательная служба: ") +
-                               to_utf8(name));
-            }
-            CloseServiceHandle(service);
-        }
-        CloseServiceHandle(scm);
-    }
+    cleanup_windivert_services();
 
     std::string detail;
     emit_state(get_state_impl(detail), detail);
