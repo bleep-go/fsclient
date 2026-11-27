@@ -15,7 +15,7 @@ public sealed class AppSettings
 {
     public string DataRoot { get; set; } = "";
     public double BlurRadius { get; set; } = 18;
-    public string WindowTitle { get; set; } = "fsclient 1.2.0";
+    public string WindowTitle { get; set; } = "fsclient 1.3.0";
 
     /// <summary>Репозиторий с релизами самого лаунчера: owner/repo.</summary>
     public string UpdateRepo { get; set; } = "BleepGo/fsclient";
@@ -112,7 +112,13 @@ public static class SettingsService
             if (Current.BlurRadius < 0 || Current.BlurRadius > 30)
                 Current.BlurRadius = 18;
             if (string.IsNullOrWhiteSpace(Current.WindowTitle))
-                Current.WindowTitle = "fsclient 1.2.0";
+                Current.WindowTitle = "fsclient 1.3.0";
+            // Старый заголовок из settings.json обновляем, но пользовательский не трогаем.
+            if (Current.WindowTitle == "fsclient 1.2.0" ||
+                Current.WindowTitle == "fsclient 1.1.0")
+            {
+                Current.WindowTitle = "fsclient 1.3.0";
+            }
             if (string.IsNullOrWhiteSpace(Current.UpdateRepo))
                 Current.UpdateRepo = "BleepGo/fsclient";
         }

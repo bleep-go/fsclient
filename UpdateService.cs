@@ -25,10 +25,10 @@ public sealed class LauncherUpdate
 public static class UpdateService
 {
     private const string AssetName = "fsclient.exe";
-    private const string UserAgent = "fsclient/1.2.0";
+    private const string UserAgent = "fsclient/1.3.0";
 
     public static Version CurrentVersion { get; } =
-        Assembly.GetExecutingAssembly().GetName().Version ?? new Version(1, 2, 0);
+        Assembly.GetExecutingAssembly().GetName().Version ?? new Version(1, 3, 0);
 
     private static string Repo
     {

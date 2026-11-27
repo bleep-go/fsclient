@@ -163,7 +163,7 @@ public sealed class TgWsProxyService
             try
             {
                 using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(15) };
-                client.DefaultRequestHeaders.Add("User-Agent", "fsclient/1.2.0");
+                client.DefaultRequestHeaders.Add("User-Agent", "fsclient/1.3.0");
                 client.DefaultRequestHeaders.Add("Accept", "application/vnd.github+json");
 
                 string json = await client.GetStringAsync(ReleasesApi);
@@ -271,7 +271,7 @@ public sealed class TgWsProxyService
                 Ui(() => DownloadProgress?.Invoke(0, "Скачивание сборки..."));
 
                 using var client = new HttpClient { Timeout = TimeSpan.FromMinutes(5) };
-                client.DefaultRequestHeaders.Add("User-Agent", "fsclient/1.2.0");
+                client.DefaultRequestHeaders.Add("User-Agent", "fsclient/1.3.0");
                 using var response = await client.GetAsync(
                     release.Url, HttpCompletionOption.ResponseHeadersRead);
                 response.EnsureSuccessStatusCode();

@@ -127,7 +127,7 @@ public partial class SettingsWindow : Window
 
         _working.BlurRadius = Math.Clamp(BlurSlider.Value, 0, 30);
         _working.WindowTitle = string.IsNullOrWhiteSpace(TitleBox.Text)
-            ? "fsclient 1.2.0"
+            ? "fsclient 1.3.0"
             : TitleBox.Text.Trim();
 
         if (_pickedBackgroundPath != null)

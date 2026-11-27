@@ -1,4 +1,4 @@
-// fsclient 1.2.0 — единый EXE.
+// fsclient 1.3.0 — единый EXE.
 // Снаружи: проверка .NET 10 Windows Desktop Runtime.
 // Внутри: встроенное WPF-приложение fsclient-core.dll и все его файлы.
 // Если runtime есть — один раз распаковываем приложение в Program Files
@@ -19,7 +19,7 @@
 static const wchar_t* kDownloadUrl =
     L"https://dotnet.microsoft.com/download/dotnet/10.0";
 
-static const wchar_t* kVersion = L"1.2.0";
+static const wchar_t* kVersion = L"1.3.0";
 
 struct EmbeddedFile
 {
@@ -209,7 +209,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
             nullptr,
             L"Для работы fsclient необходим .NET 10 (Windows Desktop Runtime).\n\n"
             L"Сейчас откроется официальная страница скачивания.",
-            L"fsclient 1.2.0 - требуется .NET 10",
+            L"fsclient 1.3.0 - требуется .NET 10",
             MB_ICONWARNING | MB_OK);
 
         ShellExecuteW(nullptr, L"open", kDownloadUrl, nullptr, nullptr, SW_SHOWNORMAL);
@@ -224,7 +224,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
             L"Не удалось установить встроенное приложение.\n"
             L"Подтвердите права администратора в окне UAC и проверьте,\n"
             L"доступна ли для записи папка Program Files\\fsclient.",
-            L"fsclient 1.2.0",
+            L"fsclient 1.3.0",
             MB_ICONERROR | MB_OK);
         return 1;
     }
@@ -253,7 +253,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
             nullptr,
             L"Не удалось запустить лаунчер. Подтвердите запрос прав\n"
             L"администратора в окне UAC или проверьте антивирус.",
-            L"fsclient 1.2.0",
+            L"fsclient 1.3.0",
             MB_ICONERROR | MB_OK);
         return 1;
     }

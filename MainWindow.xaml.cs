@@ -376,7 +376,7 @@ public partial class MainWindow : Window
     {
         var settings = SettingsService.Current;
         string title = string.IsNullOrWhiteSpace(settings.WindowTitle)
-            ? "fsclient 1.2.0"
+            ? "fsclient 1.3.0"
             : settings.WindowTitle;
 
         Title = title;
