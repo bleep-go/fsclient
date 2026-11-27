@@ -3,6 +3,7 @@ bin/
 obj/
 dist/
 build-publish/
+build-updater/
 launcher.rc
 launcher.res
 

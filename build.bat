@@ -38,6 +38,19 @@ if errorlevel 1 (
     exit /b 1
 )
 
+rem ==== 2b. Build updater.exe: он встраивается в лаунчер, отдельно не нужен ====
+echo [*] Building updater.exe for embedding ...
+if exist "%~dp0build-updater" rmdir /s /q "%~dp0build-updater" 2>nul
+mkdir "%~dp0build-updater"
+"!MINGW_BIN!g++.exe" -O2 -std=c++17 -mwindows -municode -static -static-libgcc -static-libstdc++ ^
+    -o "%~dp0build-updater\updater.exe" "%~dp0updater.cpp" -lshell32 -luser32
+if errorlevel 1 (
+    echo [!] Updater build failed.
+    exit /b 1
+)
+set "UPDATER=%~dp0build-updater\updater.exe"
+set "UPDATER=%UPDATER:\=/%"
+
 rem ==== 3. Embed published files into a single launcher EXE ====
 set "PUB=%~dp0build-publish"
 set "PUB=%PUB:\=/%"
@@ -54,6 +67,7 @@ set "MANIFEST=%MANIFEST:\=/%"
     echo 104 RCDATA "%PUB%/fsclient-core.runtimeconfig.json"
     echo 105 RCDATA "%PUB%/cpp/fs_backend.dll"
     echo 106 RCDATA "%PUB%/assets/fsclient.ico"
+    echo 107 RCDATA "%UPDATER%"
 ) > "%~dp0launcher.rc"
 
 "!MINGW_BIN!windres.exe" -i "%~dp0launcher.rc" -o "%~dp0launcher.res" -O coff
@@ -74,14 +88,6 @@ if errorlevel 1 (
     exit /b 1
 )
 
-echo [*] Building updater.exe ...
-"!MINGW_BIN!g++.exe" -O2 -std=c++17 -mwindows -municode -static -static-libgcc -static-libstdc++ ^
-    -o "%~dp0dist\updater.exe" "%~dp0updater.cpp" -lshell32 -luser32
-if errorlevel 1 (
-    echo [!] Updater build failed.
-    exit /b 1
-)
-
 rem ==== 4. Проверка: в EXE не должно остаться DLL от MinGW ====
 if exist "!MINGW_BIN!objdump.exe" (
     "!MINGW_BIN!objdump.exe" -p "%~dp0dist\fsclient.exe" 2>nul | findstr /i "libwinpthread libstdc++ libgcc libatomic" >nul
@@ -93,5 +99,5 @@ if exist "!MINGW_BIN!objdump.exe" (
     echo [!] objdump.exe не найден — проверка внешних DLL пропущена.
 )
 
-echo [+] Done: %~dp0dist\fsclient.exe
+echo [+] Done: %~dp0dist\fsclient.exe - updater.exe embedded as resource 107
 endlocal

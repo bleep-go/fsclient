@@ -327,10 +327,11 @@ public partial class MainWindow : Window
 
             string updater = _updaterPath;
             if (string.IsNullOrWhiteSpace(updater))
-                updater = Path.Combine(Path.GetDirectoryName(_launcherPath), "updater.exe");
+                updater = Path.Combine(AppContext.BaseDirectory, "updater.exe");
             if (!File.Exists(updater))
                 throw new FileNotFoundException(
-                    "Положите updater.exe рядом с fsclient.exe.", updater);
+                    "updater.exe не найден. Перезапустите fsclient.exe — он распакует его из встроенного ресурса.",
+                    updater);
 
             string downloaded = await UpdateService.DownloadAsync(_launcherUpdate, progress);
 

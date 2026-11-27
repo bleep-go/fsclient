@@ -35,6 +35,7 @@ static const EmbeddedFile kFiles[] =
     { 104, L"fsclient-core.runtimeconfig.json" },
     { 105, L"cpp\\fs_backend.dll" },
     { 106, L"assets\\fsclient.ico" },
+    { 107, L"updater.exe" },
 };
 
 static bool HasDesktopRuntime10(const std::wstring& dotnetRoot)
@@ -231,8 +232,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
     wchar_t modulePath[MAX_PATH]{};
     GetModuleFileNameW(nullptr, modulePath, MAX_PATH);
     std::wstring launcherPath = modulePath;
-    std::wstring launcherDir = launcherPath.substr(0, launcherPath.find_last_of(L"\\/"));
-    std::wstring updaterPath = launcherDir + L"\\updater.exe";
+    // updater.exe распакован из ресурса 107 рядом с ядром в папке приложения.
+    std::wstring updaterPath = root + L"\\updater.exe";
 
     std::wstring executable = root + L"\\fsclient-core.exe";
     std::wstring commandLine = L"\"" + executable + L"\" --launcher=\"" + launcherPath +
