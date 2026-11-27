@@ -1,0 +1,19 @@
+# Сборка
+bin/
+obj/
+dist/
+build-publish/
+build-updater/
+launcher.rc
+launcher.res
+
+# Артефакты C++ бэкенда
+cpp/*.a
+cpp/fs_backend.dll
+
+# Данные, создаваемые лаунчером
+releases/
+plugins/
+
+# Локально скачанные исходники/билды сторонних релизов (например, zapret 2.0 RC)
+new/
