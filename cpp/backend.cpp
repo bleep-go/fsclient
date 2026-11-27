@@ -611,6 +611,28 @@ std::wstring unquote(const std::wstring &value) {
     return value;
 }
 
+// В батниках Flowseal caret экранирует следующие символы, например ^!
+// должен дойти до winws.exe как ordinary '!'. Внутри кавычек caret — обычный
+// символ, поэтому трогаем только текст вне кавычек.
+std::wstring unescape_batch_caret(const std::wstring &value) {
+    std::wstring result;
+    bool quoted = false;
+    for (size_t i = 0; i < value.size(); ++i) {
+        wchar_t ch = value[i];
+        if (ch == L'"') {
+            quoted = !quoted;
+            result.push_back(ch);
+            continue;
+        }
+        if (!quoted && ch == L'^' && i + 1 < value.size()) {
+            result.push_back(value[++i]);
+            continue;
+        }
+        result.push_back(ch);
+    }
+    return result;
+}
+
 bool is_absolute_path(const std::wstring &value) {
     return (value.size() >= 2 && value[1] == L':') ||
            starts_with(value, L"\\\\");
@@ -618,7 +640,8 @@ bool is_absolute_path(const std::wstring &value) {
 
 std::wstring normalize_arg(const std::wstring &dir,
                            const std::wstring &token_raw) {
-    std::wstring token = expand_batch_variables(dir, token_raw);
+    std::wstring token = expand_batch_variables(
+        dir, unescape_batch_caret(token_raw));
     if (token.find(L'"') != std::wstring::npos) {
         return token;
     }
@@ -762,7 +785,8 @@ bool parse_winws_command(const std::wstring &dir, const std::wstring &bat,
         return false;
     }
 
-    std::wstring exe = expand_batch_variables(dir, unquote(tokens[0]));
+    std::wstring exe = expand_batch_variables(
+        dir, unescape_batch_caret(unquote(tokens[0])));
     while (!exe.empty() && exe.front() == L'@') {
         exe.erase(exe.begin());
     }
@@ -835,6 +859,29 @@ void reader_thread(HANDLE read_pipe) {
     if (!pending.empty()) {
         emit_log(0, pending);
     }
+}
+
+// Читаем всё, что успел вывести winws, если он завершился сразу после старта.
+std::string drain_pipe(HANDLE read_pipe) {
+    std::string output;
+    for (;;) {
+        DWORD available = 0;
+        if (!PeekNamedPipe(read_pipe, nullptr, 0, nullptr, &available, nullptr) ||
+            available == 0) {
+            break;
+        }
+        std::vector<char> buffer(available);
+        DWORD read = 0;
+        if (!ReadFile(read_pipe, buffer.data(), buffer.size(), &read, nullptr) ||
+            read == 0) {
+            break;
+        }
+        output.append(buffer.data(), read);
+    }
+    while (!output.empty() && (output.back() == '\r' || output.back() == '\n')) {
+        output.pop_back();
+    }
+    return output;
 }
 
 void stop_runtime_internal(bool kill_orphans) {
@@ -1200,6 +1247,20 @@ FS_API int FS_CALL fs_run_strategy(const wchar_t *dir, const wchar_t *bat) {
     }
     std::string detail;
     int state = get_state_impl(detail);
+    if (state == FS_STATE_RUNNING_PROCESS) {
+        bool ours = false;
+        {
+            std::lock_guard<std::mutex> lock(g_runtime_mutex);
+            ours = g_process != nullptr && g_pid != 0;
+        }
+        if (!ours) {
+            // Осиротевший winws держит фильтр WinDivert. Убираем его и даём
+            // драйверу время освободить фильтр перед новым запуском.
+            terminate_orphan_winws();
+            Sleep(1500);
+            state = get_state_impl(detail);
+        }
+    }
     if (state != FS_STATE_IDLE) {
         set_error("Обход уже активен: " + detail +
                   ". Повторный запуск заблокирован.");
@@ -1231,99 +1292,132 @@ FS_API int FS_CALL fs_run_strategy(const wchar_t *dir, const wchar_t *bat) {
         work_dir = exe.substr(0, slash);
     }
 
-    // Create a job object that kills the entire tree when its handle closes.
-    HANDLE job = CreateJobObjectW(nullptr, nullptr);
-    if (!job) {
-        set_error("Не удалось создать Job Object: " +
-                  system_error_text(GetLastError()));
-        return FS_ERR_GENERIC;
-    }
-    JOBOBJECT_EXTENDED_LIMIT_INFORMATION limits{};
-    limits.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
-    if (!SetInformationJobObject(job, JobObjectExtendedLimitInformation,
-                                 &limits, sizeof(limits))) {
-        set_error("Не удалось настроить Job Object: " +
-                  system_error_text(GetLastError()));
-        CloseHandle(job);
-        return FS_ERR_GENERIC;
-    }
-
-    SECURITY_ATTRIBUTES sa{};
-    sa.nLength = sizeof(sa);
-    sa.bInheritHandle = TRUE;
-
-    HANDLE read_pipe = nullptr;
-    HANDLE write_pipe = nullptr;
-    if (!CreatePipe(&read_pipe, &write_pipe, &sa, 0)) {
-        set_error("Не удалось создать pipe вывода: " +
-                  system_error_text(GetLastError()));
-        CloseHandle(job);
-        return FS_ERR_GENERIC;
-    }
-    SetHandleInformation(read_pipe, HANDLE_FLAG_INHERIT, 0);
-
-    HANDLE input_read = nullptr;
-    HANDLE input_write = nullptr;
-    CreatePipe(&input_read, &input_write, &sa, 0);
-    SetHandleInformation(input_read, HANDLE_FLAG_INHERIT, 0);
-
-    STARTUPINFOW startup{};
-    startup.cb = sizeof(startup);
-    startup.dwFlags = STARTF_USESTDHANDLES | STARTF_USESHOWWINDOW;
-    startup.hStdInput = input_read;
-    startup.hStdOutput = write_pipe;
-    startup.hStdError = write_pipe;
-    startup.wShowWindow = SW_HIDE;
-
-    PROCESS_INFORMATION process{};
-    std::vector<wchar_t> mutable_command(command_line.begin(),
-                                         command_line.end());
-    mutable_command.push_back(L'\0');
-
-    BOOL created = CreateProcessW(
-        nullptr, mutable_command.data(), nullptr, nullptr, TRUE,
-        CREATE_NO_WINDOW, nullptr, work_dir.c_str(), &startup, &process
-    );
-    DWORD create_error = GetLastError();
-
-    CloseHandle(input_read);
-    CloseHandle(input_write);
-    CloseHandle(write_pipe);
-    if (!created) {
-        CloseHandle(read_pipe);
-        CloseHandle(job);
-        set_error("Не удалось запустить стратегию: " +
-                  system_error_text(create_error));
-        return FS_ERR_GENERIC;
-    }
-
-    BOOL assigned = AssignProcessToJobObject(job, process.hProcess);
-    if (!assigned) {
-        emit_log(1, std::string("Не удалось связать процесс с Job Object: ") +
-                       system_error_text(GetLastError()));
-    }
-
-    {
-        std::lock_guard<std::mutex> lock(g_runtime_mutex);
-        if (g_reader.joinable()) {
-            g_reader.join();
+    // winws может выйти сразу, если WinDivert ещё удерживает фильтр после
+    // предыдущего запуска. Повторяем старт пару раз с паузой и пишем вывод
+    // в лог, чтобы причина была видна.
+    bool launched = false;
+    for (int attempt = 0; attempt < 3 && !launched; ++attempt) {
+        HANDLE job = CreateJobObjectW(nullptr, nullptr);
+        if (!job) {
+            set_error("Не удалось создать Job Object: " +
+                      system_error_text(GetLastError()));
+            return FS_ERR_GENERIC;
         }
-        g_job = job;
-        g_process = process.hProcess;
-        g_read_pipe = read_pipe;
-        g_pid = process.dwProcessId;
-        g_active_strategy = strategy;
-        g_reader = std::thread(reader_thread, read_pipe);
+        JOBOBJECT_EXTENDED_LIMIT_INFORMATION limits{};
+        limits.BasicLimitInformation.LimitFlags =
+            JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+        if (!SetInformationJobObject(job, JobObjectExtendedLimitInformation,
+                                     &limits, sizeof(limits))) {
+            set_error("Не удалось настроить Job Object: " +
+                      system_error_text(GetLastError()));
+            CloseHandle(job);
+            return FS_ERR_GENERIC;
+        }
+
+        SECURITY_ATTRIBUTES sa{};
+        sa.nLength = sizeof(sa);
+        sa.bInheritHandle = TRUE;
+
+        HANDLE read_pipe = nullptr;
+        HANDLE write_pipe = nullptr;
+        if (!CreatePipe(&read_pipe, &write_pipe, &sa, 0)) {
+            set_error("Не удалось создать pipe вывода: " +
+                      system_error_text(GetLastError()));
+            CloseHandle(job);
+            return FS_ERR_GENERIC;
+        }
+        SetHandleInformation(read_pipe, HANDLE_FLAG_INHERIT, 0);
+
+        HANDLE input_read = nullptr;
+        HANDLE input_write = nullptr;
+        CreatePipe(&input_read, &input_write, &sa, 0);
+        SetHandleInformation(input_read, HANDLE_FLAG_INHERIT, 0);
+
+        STARTUPINFOW startup{};
+        startup.cb = sizeof(startup);
+        startup.dwFlags = STARTF_USESTDHANDLES | STARTF_USESHOWWINDOW;
+        startup.hStdInput = input_read;
+        startup.hStdOutput = write_pipe;
+        startup.hStdError = write_pipe;
+        startup.wShowWindow = SW_HIDE;
+
+        PROCESS_INFORMATION process{};
+        std::vector<wchar_t> mutable_command(command_line.begin(),
+                                             command_line.end());
+        mutable_command.push_back(L'\0');
+
+        BOOL created = CreateProcessW(
+            nullptr, mutable_command.data(), nullptr, nullptr, TRUE,
+            CREATE_NO_WINDOW, nullptr, work_dir.c_str(), &startup, &process
+        );
+        DWORD create_error = GetLastError();
+
+        CloseHandle(input_read);
+        CloseHandle(input_write);
+        CloseHandle(write_pipe);
+        if (!created) {
+            CloseHandle(read_pipe);
+            CloseHandle(job);
+            set_error("Не удалось запустить стратегию: " +
+                      system_error_text(create_error));
+            return FS_ERR_GENERIC;
+        }
+
+        BOOL assigned = AssignProcessToJobObject(job, process.hProcess);
+        if (!assigned) {
+            emit_log(1, std::string("Не удалось связать процесс с Job Object: ") +
+                           system_error_text(GetLastError()));
+        }
+
+        // Если процесс умер за 1.2 с — это почти всегда ошибка WinDivert.
+        DWORD wait = WaitForSingleObject(process.hProcess, 1200);
+        if (wait == WAIT_OBJECT_0) {
+            DWORD code = 0;
+            GetExitCodeProcess(process.hProcess, &code);
+            std::string output = drain_pipe(read_pipe);
+            emit_log(1, "winws.exe завершился сразу (код " +
+                           std::to_string(code) +
+                           "). Повтор через 1 с...");
+            if (!output.empty()) {
+                emit_log(1, output);
+            }
+            CloseHandle(process.hThread);
+            CloseHandle(process.hProcess);
+            CloseHandle(read_pipe);
+            CloseHandle(job);
+            Sleep(1000);
+            continue;
+        }
+
+        {
+            std::lock_guard<std::mutex> lock(g_runtime_mutex);
+            if (g_reader.joinable()) {
+                g_reader.join();
+            }
+            g_job = job;
+            g_process = process.hProcess;
+            g_read_pipe = read_pipe;
+            g_pid = process.dwProcessId;
+            g_active_strategy = strategy;
+            g_reader = std::thread(reader_thread, read_pipe);
+        }
+
+        emit_log(0, "Запущена стратегия: " + to_utf8(strategy) +
+                       " (PID " + std::to_string(process.dwProcessId) + ")");
+        if (!assigned) {
+            emit_log(1, "Процесс не привязан к Job Object — при остановке "
+                       "будет выполнен принудительный поиск winws.exe.");
+        }
+        emit_state(FS_STATE_RUNNING_PROCESS, to_utf8(strategy));
+        set_error("");
+        launched = true;
     }
 
-    emit_log(0, "Запущена стратегия: " + to_utf8(strategy) +
-                   " (PID " + std::to_string(process.dwProcessId) + ")");
-    if (!assigned) {
-        emit_log(1, "Процесс не привязан к Job Object — при остановке "
-                   "будет выполнен принудительный поиск winws.exe.");
+    if (!launched) {
+        set_error("winws.exe завершался сразу после старта. Проверьте, "
+                  "не удерживает ли фильтр WinDivert другая программа.");
+        return FS_ERR_GENERIC;
     }
-    emit_state(FS_STATE_RUNNING_PROCESS, to_utf8(strategy));
-    set_error("");
     return FS_OK;
 }
 

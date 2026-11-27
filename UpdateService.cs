@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Net;
 using System.Net.Http;
 using System.Reflection;
 using System.Security.Cryptography;
@@ -42,12 +43,31 @@ public static class UpdateService
 
     public static async Task<LauncherUpdate> CheckAsync(CancellationToken ct = default)
     {
-        string api = $"https://api.github.com/repos/{Repo}/releases/latest";
+        string repo = Repo;
+        int slash = repo.IndexOf('/');
+        if (slash <= 0 || slash == repo.Length - 1 || repo.IndexOf('/', slash + 1) >= 0)
+            return null; // Репозиторий обновлений не настроен.
+
+        string api = $"https://api.github.com/repos/{repo}/releases/latest";
         using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(15) };
         client.DefaultRequestHeaders.Add("User-Agent", UserAgent);
         client.DefaultRequestHeaders.Add("Accept", "application/vnd.github+json");
 
-        string json = await client.GetStringAsync(api, ct);
+        string json;
+        try
+        {
+            json = await client.GetStringAsync(api, ct);
+        }
+        catch (HttpRequestException ex) when (
+            ex.StatusCode == HttpStatusCode.NotFound ||
+            ex.StatusCode == HttpStatusCode.Unauthorized ||
+            ex.StatusCode == HttpStatusCode.Forbidden)
+        {
+            // Репозиторий ещё не создан или приватный — это не ошибка для
+            // пользователя, просто обновлений пока нет.
+            return null;
+        }
+
         using var doc = JsonDocument.Parse(json);
         JsonElement root = doc.RootElement;
 
