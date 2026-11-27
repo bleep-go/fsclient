@@ -68,11 +68,35 @@ dist\fsclient.exe
 а `updater.exe` права не запрашивает — он наследует их от уже elevated
 лаунчера.
 
-Для разработки (нужен .NET SDK 10 и уже собранная `cpp\fs_backend.dll`):
+## Сборка с нуля
+
+Нужны **.NET SDK 10 (Windows Desktop)** и **MinGW-w64** (`g++.exe`, `windres.exe`,
+`objdump.exe` должны быть в `PATH`). Больше ничего предварительно собирать не нужно.
 
 ```bat
-dotnet run
+git clone <ваш-репозиторий> fsclient
+cd fsclient
+build.bat
 ```
+
+`build.bat` сам:
+
+1. соберёт `cpp\fs_backend.dll` из `cpp\backend.cpp`;
+2. опубликует WPF-ядро из C#/XAML-файлов в `build-publish\`;
+3. соберёт **`updater.exe` из `updater.cpp`** в служебную папку `build-updater\`;
+4. встроит updater и все остальные файлы в `dist\fsclient.exe` ресурсами;
+5. проверит, что в готовом EXE нет внешних DLL MinGW.
+
+### Где лежит исходник updater
+
+- **`updater.cpp`** в корне репозитория — полный исходный код `updater.exe`.
+- Отдельный EXE в репозитории не хранится: `build-updater\` создаётся сборкой
+  и добавлен в `.gitignore`.
+- Готовый updater попадает внутрь `fsclient.exe` как `107 RCDATA`.
+- `launcher.cpp` распаковывает его в `%ProgramFiles%\fsclient\app\updater.exe`.
+
+Для быстрой отладки WPF-части без лаунчера можно сделать `dotnet run`, но для
+полного приложения нужен именно `build.bat`.
 
 ## Настройки
 
