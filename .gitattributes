@@ -1,0 +1,17 @@
+* text=auto
+
+*.bat       text eol=crlf
+*.cs        text eol=crlf
+*.xaml      text eol=crlf
+*.csproj    text eol=crlf
+*.cpp       text eol=crlf
+*.h         text eol=crlf
+*.manifest  text eol=crlf
+*.md        text eol=lf
+.gitignore  text eol=lf
+
+*.png  binary
+*.jpg  binary
+*.ico  binary
+*.dll  binary
+*.a    binary

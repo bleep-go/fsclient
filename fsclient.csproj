@@ -1,0 +1,39 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+    <AssemblyName>fsclient-core</AssemblyName>
+    <RootNamespace>FsClient</RootNamespace>
+    <ApplicationIcon>assets\fsclient.ico</ApplicationIcon>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <NoWarn>$(NoWarn);WFO0003</NoWarn>
+
+    <!-- Framework-dependent: .NET 10 проверяет launcher.cpp до запуска -->
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>false</SelfContained>
+    <PublishSingleFile>false</PublishSingleFile>
+
+    <Version>1.2.0</Version>
+    <AssemblyVersion>1.2.0.0</AssemblyVersion>
+    <FileVersion>1.2.0.0</FileVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Resource Include="assets\background.jpg" Link="assets\background.jpg" />
+
+    <None Include="assets\fsclient.ico" Link="assets\fsclient.ico" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="cpp\fs_backend.dll" Link="cpp\fs_backend.dll" CopyToOutputDirectory="PreserveNewest"
+          Condition="Exists('cpp\fs_backend.dll')" />
+
+    <!-- Резервный путь, если DLL/иконка лежат не рядом с EXE -->
+    <EmbeddedResource Include="cpp\fs_backend.dll" LogicalName="FsClient.fs_backend.dll"
+                      Condition="Exists('cpp\fs_backend.dll')" />
+    <EmbeddedResource Include="assets\fsclient.ico" LogicalName="FsClient.fsclient.ico" />
+  </ItemGroup>
+
+</Project>
