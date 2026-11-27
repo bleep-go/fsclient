@@ -1,12 +1,15 @@
-__pycache__/
-*.py[cod]
-
-build/
+# Сборка
+bin/
+obj/
 dist/
-*.spec
+build-publish/
+launcher.rc
+launcher.res
 
+# Артефакты C++ бэкенда
 cpp/*.a
 cpp/fs_backend.dll
+
+# Данные, создаваемые лаунчером
 releases/
 plugins/
-fsclient-src.zip

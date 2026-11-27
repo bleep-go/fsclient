@@ -6,10 +6,21 @@ using System.Windows.Media.Animation;
 namespace FsClient;
 
 /// <summary>
+/// Элемент с матовым стеклом. Позволяет временно снять VisualBrush,
+/// чтобы окно в трее не удерживало размытую копию фона в памяти.
+/// </summary>
+public interface IBlurHost
+{
+    UIElement BlurSource { get; set; }
+    void ReleaseBlur();
+    void RestoreBlur(UIElement source);
+}
+
+/// <summary>
 /// Панель с матовым стеклом: берёт размытую копию фона через VisualBrush
 /// и добавляет полупрозрачную подложку + тонкую границу.
 /// </summary>
-public class FrostedBorder : Border
+public class FrostedBorder : Border, IBlurHost
 {
     public static readonly DependencyProperty BlurSourceProperty = DependencyProperty.Register(
         nameof(BlurSource), typeof(UIElement), typeof(FrostedBorder),
@@ -100,6 +111,19 @@ public class FrostedBorder : Border
         }
     }
 
+    public void ReleaseBlur()
+    {
+        _brush = null;
+        Background = null;
+        BlurSource = null;
+    }
+
+    public void RestoreBlur(UIElement source)
+    {
+        BlurSource = source;
+        Invalidate();
+    }
+
     protected override void OnRender(DrawingContext dc)
     {
         base.OnRender(dc);
@@ -116,7 +140,7 @@ public class FrostedBorder : Border
 /// <summary>
 /// Кнопка с тем же эффектом матового стекла.
 /// </summary>
-public class FrostedButton : System.Windows.Controls.Button
+public class FrostedButton : System.Windows.Controls.Button, IBlurHost
 {
     public static readonly DependencyProperty BlurSourceProperty = DependencyProperty.Register(
         nameof(BlurSource), typeof(UIElement), typeof(FrostedButton),
@@ -222,6 +246,19 @@ public class FrostedButton : System.Windows.Controls.Button
         {
             _updating = false;
         }
+    }
+
+    public void ReleaseBlur()
+    {
+        _brush = null;
+        Background = null;
+        BlurSource = null;
+    }
+
+    public void RestoreBlur(UIElement source)
+    {
+        BlurSource = source;
+        Invalidate();
     }
 
     protected override void OnRender(DrawingContext dc)

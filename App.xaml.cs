@@ -10,10 +10,14 @@ public partial class App : System.Windows.Application
 
         try
         {
+            SettingsService.Initialize();
+            LaunchLog.Start();
             Backend.Initialize();
+            TgWsProxyService.Initialize();
         }
         catch (System.Exception ex)
         {
+            LaunchLog.Write("Ошибка запуска: " + ex.Message);
             System.Windows.MessageBox.Show(
                 "Не удалось загрузить бэкенд fs_backend.dll.\n\n" + ex.Message,
                 "fsclient",
@@ -45,6 +49,7 @@ public partial class App : System.Windows.Application
 
     protected override void OnExit(ExitEventArgs e)
     {
+        LaunchLog.Shutdown();
         Backend.Shutdown();
         base.OnExit(e);
     }

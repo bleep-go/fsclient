@@ -62,11 +62,24 @@ if errorlevel 1 (
 echo [*] Building single dist\fsclient.exe ...
 if exist "%~dp0dist" rmdir /s /q "%~dp0dist" 2>nul
 mkdir "%~dp0dist"
-"!MINGW_BIN!g++.exe" -O2 -std=c++17 -mwindows -static-libgcc -static-libstdc++ ^
+rem -static обязателен: лаунчер загружает libwinpthread-1.dll до WinMain,
+rem поэтому положить её в ресурсы и распаковать позже нельзя.
+"!MINGW_BIN!g++.exe" -O2 -std=c++17 -mwindows -static -static-libgcc -static-libstdc++ ^
     -o "%~dp0dist\fsclient.exe" "%~dp0launcher.cpp" "%~dp0launcher.res" -lshell32 -luser32
 if errorlevel 1 (
     echo [!] Launcher build failed.
     exit /b 1
+)
+
+rem ==== 4. Проверка: в EXE не должно остаться DLL от MinGW ====
+if exist "!MINGW_BIN!objdump.exe" (
+    "!MINGW_BIN!objdump.exe" -p "%~dp0dist\fsclient.exe" 2>nul | findstr /i "libwinpthread libstdc++ libgcc libatomic" >nul
+    if not errorlevel 1 (
+        echo [!] fsclient.exe всё ещё зависит от DLL MinGW. Сборка прервана.
+        exit /b 1
+    )
+) else (
+    echo [!] objdump.exe не найден — проверка внешних DLL пропущена.
 )
 
 echo [+] Done: %~dp0dist\fsclient.exe

@@ -29,24 +29,34 @@ public sealed class Backend
     public const int FsStateRunningProcess = 1;
     public const int FsStateRunningService = 2;
 
+    public const int TgwsStateIdle = 0;
+    public const int TgwsStateRunning = 1;
+
     private const string DllName = "fs_backend";
     private const string ReleasesApi = "https://api.github.com/repos/Flowseal/zapret-discord-youtube/releases";
 
     private static readonly string AppDir = AppContext.BaseDirectory;
-    private static readonly string ReleasesDir = Path.Combine(AppDir, "releases");
-    private static readonly string PluginsDir = Path.Combine(AppDir, "plugins");
     private static readonly string DllPath = Path.Combine(AppDir, "cpp", "fs_backend.dll");
+
+    // Папки данных задаются в настройках и могут быть перенесены пользователем.
+    private static string ReleasesDir => SettingsService.ReleasesDir;
+    private static string PluginsDir => SettingsService.PluginsDir;
 
     private static string ResolveDllPath() =>
         File.Exists(DllPath) ? DllPath : BundledResources.Extract("FsClient.fs_backend.dll", "fs_backend.dll");
 
+    // GitHub отдаёт теги без префикса v. Резервный список должен совпадать
+    // с именами папок в releases\, иначе скачанный релиз не находится.
+    private static string FallbackUrl(string tag) =>
+        $"https://github.com/Flowseal/zapret-discord-youtube/releases/download/{tag}/zapret-discord-youtube-{tag}.zip";
+
     private static readonly List<ReleaseInfo> FallbackReleases = new()
     {
-        new ReleaseInfo { Tag = "v1.10.4", Url = null, IsLatest = true },
-        new ReleaseInfo { Tag = "v1.10.3", Url = null },
-        new ReleaseInfo { Tag = "v1.10.2", Url = null },
-        new ReleaseInfo { Tag = "v1.10.1", Url = null },
-        new ReleaseInfo { Tag = "v1.10.0", Url = null },
+        new ReleaseInfo { Tag = "1.10.4", Url = FallbackUrl("1.10.4"), IsLatest = true },
+        new ReleaseInfo { Tag = "1.10.3", Url = FallbackUrl("1.10.3") },
+        new ReleaseInfo { Tag = "1.10.2", Url = FallbackUrl("1.10.2") },
+        new ReleaseInfo { Tag = "1.10.1", Url = FallbackUrl("1.10.1") },
+        new ReleaseInfo { Tag = "1.10.0", Url = FallbackUrl("1.10.0") },
     };
 
     [UnmanagedFunctionPointer(CallingConvention.StdCall)]
@@ -114,6 +124,20 @@ public sealed class Backend
 
     [DllImport(DllName, CallingConvention = CallingConvention.StdCall)]
     private static extern int fs_stop_service();
+
+    [DllImport(DllName, CallingConvention = CallingConvention.StdCall, CharSet = CharSet.Unicode)]
+    private static extern int fs_tgws_start(
+        [MarshalAs(UnmanagedType.LPWStr)] string exe,
+        [MarshalAs(UnmanagedType.LPWStr)] string dir);
+
+    [DllImport(DllName, CallingConvention = CallingConvention.StdCall, CharSet = CharSet.Unicode)]
+    private static extern int fs_tgws_stop(
+        [MarshalAs(UnmanagedType.LPWStr)] string dir);
+
+    [DllImport(DllName, CallingConvention = CallingConvention.StdCall, CharSet = CharSet.Unicode)]
+    private static extern int fs_tgws_state(
+        [MarshalAs(UnmanagedType.LPWStr)] string dir,
+        [Out] byte[] output, int outputLen);
 
     [DllImport(DllName, CallingConvention = CallingConvention.StdCall)]
     private static extern int fs_last_error([Out] byte[] output, int outputLen);
@@ -265,6 +289,23 @@ public sealed class Backend
         return fs_get_installed_service(buffer, buffer.Length) == FsOk ? Decode(buffer) : "";
     }
 
+    // ---------- TG WS Proxy (официальный exe Flowseal) ----------
+
+    public (int State, string Detail) GetTgWsState(string dir)
+    {
+        var buffer = new byte[512];
+        int state = fs_tgws_state(dir ?? "", buffer, buffer.Length);
+        return (state, Decode(buffer));
+    }
+
+    public (bool Ok, string Error) StartTgWs(string exe, string dir)
+    {
+        int rc = fs_tgws_start(exe ?? "", dir ?? "");
+        return (rc == FsOk, LastError());
+    }
+
+    public void StopTgWs(string dir) => fs_tgws_stop(dir ?? "");
+
     public string GetStrategyCommand(string tag, string bat)
     {
         var buffer = new byte[8192];
@@ -363,8 +404,21 @@ public sealed class Backend
         });
     }
 
+    // Старые сборки могли сохранить папку как "v1.10.4"; GitHub использует
+    // "1.10.4". Приводим оба варианта к одному имени.
+    private static string NormalizeTag(string tag)
+    {
+        if (string.IsNullOrEmpty(tag))
+            return "";
+
+        tag = tag.Trim();
+        if (tag.Length > 1 && (tag[0] == 'v' || tag[0] == 'V') && char.IsDigit(tag[1]))
+            return tag[1..];
+        return tag;
+    }
+
     public bool IsDownloaded(string tag) =>
-        !string.IsNullOrEmpty(tag) && Directory.Exists(Path.Combine(ReleasesDir, tag));
+        !string.IsNullOrEmpty(tag) && Directory.Exists(Path.Combine(ReleasesDir, NormalizeTag(tag)));
 
     public HashSet<string> ListDownloadedTags()
     {
@@ -380,7 +434,7 @@ public sealed class Backend
 
     public List<string> ListStrategies(string tag)
     {
-        string dir = string.IsNullOrEmpty(tag) ? "" : Path.Combine(ReleasesDir, tag);
+        string dir = string.IsNullOrEmpty(tag) ? "" : Path.Combine(ReleasesDir, NormalizeTag(tag));
         if (!Directory.Exists(dir))
             return new List<string>();
 
@@ -405,9 +459,10 @@ public sealed class Backend
         {
             try
             {
+                string folderTag = NormalizeTag(tag);
                 Directory.CreateDirectory(ReleasesDir);
-                string targetDir = Path.Combine(ReleasesDir, tag);
-                string zipPath = Path.Combine(ReleasesDir, tag + ".zip");
+                string targetDir = Path.Combine(ReleasesDir, folderTag);
+                string zipPath = Path.Combine(ReleasesDir, folderTag + ".zip");
 
                 Ui(() => DownloadProgress?.Invoke(0, "Скачивание архива..."));
 
@@ -579,7 +634,7 @@ public sealed class Backend
     }
 
     public string ReleaseDir(string tag) =>
-        Path.GetFullPath(Path.Combine(ReleasesDir, tag ?? ""));
+        Path.GetFullPath(Path.Combine(ReleasesDir, NormalizeTag(tag ?? "")));
 
     public void OpenFolder(string tag)
     {
