@@ -1,0 +1,373 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Text.Json;
+using System.Threading;
+
+namespace FsClient;
+
+/// <summary>
+/// Настройки лаунчера. settings.json лежит в %LOCALAPPDATA%\fsclient
+/// (без номера версии) — оттуда лаунчер узнаёт, где искать данные.
+/// </summary>
+public sealed class AppSettings
+{
+    public string DataRoot { get; set; } = "";
+    public double BlurRadius { get; set; } = 18;
+    public string WindowTitle { get; set; } = "fsclient 1.4.0";
+
+    /// <summary>Репозиторий с релизами самого лаунчера: owner/repo.</summary>
+    public string UpdateRepo { get; set; } = "bleep-go/fsclient";
+
+    /// <summary>Автозапуск через Планировщик задач без запроса UAC.</summary>
+    public bool StartWithWindows { get; set; }
+
+    /// <summary>При запуске вместе с ПК сразу скрывать окно в трей.</summary>
+    public bool StartInTray { get; set; }
+
+    /// <summary>Скачивать и ставить обновление лаунчера без нажатия кнопки.</summary>
+    public bool AutoUpdate { get; set; } = true;
+
+    /// <summary>Показывать пре-релизы лаунчера (устанавливаются только вручную).</summary>
+    public bool BetaTester { get; set; }
+
+    /// <summary>Запускать последнюю стратегию вместе с лаунчером.</summary>
+    public bool AutoRunLastStrategy { get; set; }
+
+    /// <summary>Имя файла в папке assets внутри DataRoot. Пусто = встроенный фон.</summary>
+    public string BackgroundImage { get; set; } = "";
+
+    /// <summary>Последний выбранный релиз zapret.</summary>
+    public string LastZapretTag { get; set; } = "";
+
+    /// <summary>Последний выбранный релиз TG WS Proxy.</summary>
+    public string LastTgTag { get; set; } = "";
+
+    /// <summary>Последняя запущенная стратегия zapret и действие с ней.</summary>
+    public string LastStrategyBat { get; set; } = "";
+    public string LastStrategyAction { get; set; } = "run";
+
+    public AppSettings Clone() => new()
+    {
+        DataRoot = DataRoot,
+        BlurRadius = BlurRadius,
+        WindowTitle = WindowTitle,
+        UpdateRepo = UpdateRepo,
+        StartWithWindows = StartWithWindows,
+        StartInTray = StartInTray,
+        AutoUpdate = AutoUpdate,
+        BetaTester = BetaTester,
+        AutoRunLastStrategy = AutoRunLastStrategy,
+        BackgroundImage = BackgroundImage,
+        LastZapretTag = LastZapretTag,
+        LastTgTag = LastTgTag,
+        LastStrategyBat = LastStrategyBat,
+        LastStrategyAction = LastStrategyAction
+    };
+}
+
+public static class SettingsService
+{
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        WriteIndented = true
+    };
+
+    private static string LocalRoot { get; } = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "fsclient");
+
+    /// <summary>Папка конфига без номера версии.</summary>
+    public static string BootstrapDir => LocalRoot;
+
+    /// <summary>Старый путь с версией — нужен только для переноса настроек.</summary>
+    private static string LegacyBootstrapDir => Path.Combine(LocalRoot, "1.1.0");
+
+    private static string SettingsPath => Path.Combine(BootstrapDir, "settings.json");
+
+    public static AppSettings Current { get; private set; }
+
+    /// <summary>True, если settings.json создан в этом запуске впервые.</summary>
+    public static bool FirstRun { get; private set; }
+
+    public static string DataRoot => Current.DataRoot;
+    public static string ReleasesDir => Path.Combine(DataRoot, "releases");
+    public static string PluginsDir => Path.Combine(DataRoot, "plugins");
+    public static string LogsDir => Path.Combine(DataRoot, "logs");
+    public static string AssetsDir => Path.Combine(DataRoot, "assets");
+
+    public static void Initialize()
+    {
+        Directory.CreateDirectory(BootstrapDir);
+
+        string legacySettings = Path.Combine(LegacyBootstrapDir, "settings.json");
+        if (!File.Exists(SettingsPath) && File.Exists(legacySettings))
+        {
+            try { File.Copy(legacySettings, SettingsPath, true); }
+            catch { /* если не получилось — создадим конфиг заново */ }
+        }
+
+        bool firstRun = !File.Exists(SettingsPath);
+        FirstRun = firstRun;
+        bool changed = false;
+        if (firstRun)
+        {
+            Current = new AppSettings { DataRoot = DefaultDataRoot() };
+            changed = true;
+        }
+        else
+        {
+            try
+            {
+                Current = JsonSerializer.Deserialize<AppSettings>(
+                    File.ReadAllText(SettingsPath), JsonOptions) ?? new AppSettings();
+            }
+            catch
+            {
+                Current = new AppSettings { DataRoot = DefaultDataRoot() };
+                changed = true;
+            }
+
+            // След локального теста больше не должен попадать в рабочий конфиг.
+            if (string.IsNullOrWhiteSpace(Current.DataRoot) || IsTestTempPath(Current.DataRoot))
+            {
+                Current.DataRoot = DefaultDataRoot();
+                changed = true;
+            }
+            if (Current.BlurRadius < 0 || Current.BlurRadius > 30)
+                Current.BlurRadius = 18;
+            if (string.IsNullOrWhiteSpace(Current.WindowTitle))
+            {
+                Current.WindowTitle = "fsclient 1.4.0";
+                changed = true;
+            }
+            // Старый заголовок из settings.json обновляем, но пользовательский не трогаем.
+            if (Current.WindowTitle == "fsclient 1.2.0" ||
+                Current.WindowTitle == "fsclient 1.1.0" ||
+                Current.WindowTitle == "fsclient 1.3.0" ||
+                Current.WindowTitle == "fsclient 1.3.1")
+            {
+                Current.WindowTitle = "fsclient 1.4.0";
+                changed = true;
+            }
+
+            string repo = NormalizeUpdateRepo(Current.UpdateRepo);
+            if (!string.Equals(repo, Current.UpdateRepo, StringComparison.Ordinal))
+            {
+                Current.UpdateRepo = repo;
+                changed = true;
+            }
+        }
+
+        // Переносим старые загрузки даже если settings.json уже был перенесён.
+        MigrateLegacyData();
+        EnsureDirectories();
+        if (changed)
+            Save();
+    }
+
+    private const string CanonicalUpdateRepo = "bleep-go/fsclient";
+
+    private static string NormalizeUpdateRepo(string repo)
+    {
+        if (string.IsNullOrWhiteSpace(repo))
+            return CanonicalUpdateRepo;
+
+        string value = repo.Trim().Trim('/');
+        // В старых конфигах было "BleepGo/fsclient" — такого репозитория нет,
+        // поэтому проверка обновлений молча получала 404 и ничего не показывала.
+        return string.Equals(value, "BleepGo/fsclient", StringComparison.OrdinalIgnoreCase)
+            ? CanonicalUpdateRepo
+            : value;
+    }
+
+    private static bool IsTestTempPath(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return false;
+
+        string testRoot = Path.Combine(Path.GetTempPath(), "opencode", "settings-check");
+        return IsInside(path, testRoot);
+    }
+
+    private static string DefaultDataRoot()
+    {
+        string programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
+        if (string.IsNullOrWhiteSpace(programFiles))
+            programFiles = Path.Combine(BootstrapDir, "data");
+        return Path.Combine(programFiles, "fsclient", "data");
+    }
+
+    private static void EnsureDirectories()
+    {
+        Directory.CreateDirectory(DataRoot);
+        Directory.CreateDirectory(ReleasesDir);
+        Directory.CreateDirectory(PluginsDir);
+        Directory.CreateDirectory(LogsDir);
+        Directory.CreateDirectory(AssetsDir);
+    }
+
+    /// <summary>
+    /// Забираем уже скачанные релизы из старых папок с версией в пути,
+    /// чтобы не скачивать всё заново после перехода на %LOCALAPPDATA%\fsclient.
+    /// </summary>
+    private static void MigrateLegacyData()
+    {
+        string[] legacyApps =
+        {
+            Path.Combine(LegacyBootstrapDir, "app"),
+            Path.Combine(BootstrapDir, "app")
+        };
+
+        foreach (string legacyApp in legacyApps)
+        {
+            foreach (string name in new[] { "releases", "plugins", "logs", "tg-ws-proxy" })
+            {
+                string source = Path.Combine(legacyApp, name);
+                string target = Path.Combine(DataRoot, name);
+                if (!Directory.Exists(source))
+                    continue;
+
+                try
+                {
+                    if (HasAnyEntry(source))
+                        CopyTreeVerified(source, target);
+                    Directory.Delete(source, true);
+                }
+                catch
+                {
+                    // Миграция best effort: при ошибке старые данные остаются на месте.
+                }
+            }
+        }
+    }
+
+    private static bool HasAnyEntry(string dir) =>
+        Directory.EnumerateFileSystemEntries(dir).Any();
+
+    private static List<(string Relative, long Length)> Manifest(string root)
+    {
+        var result = new List<(string, long)>();
+        foreach (string file in Directory.GetFiles(root, "*", SearchOption.AllDirectories))
+        {
+            string relative = Path.GetRelativePath(root, file);
+            result.Add((relative, new FileInfo(file).Length));
+        }
+        return result;
+    }
+
+    /// <summary>Копирует дерево и проверяет результат до удаления источника.</summary>
+    private static void CopyTreeVerified(string source, string destination,
+        IProgress<string> progress = null)
+    {
+        Directory.CreateDirectory(destination);
+
+        foreach (string dir in Directory.GetDirectories(source, "*", SearchOption.AllDirectories))
+        {
+            string target = Path.Combine(destination, Path.GetRelativePath(source, dir));
+            Directory.CreateDirectory(target);
+        }
+
+        var sourceFiles = new List<(string Relative, long Length)>();
+        foreach (string file in Directory.GetFiles(source, "*", SearchOption.AllDirectories))
+        {
+            string relative = Path.GetRelativePath(source, file);
+            string target = Path.Combine(destination, relative);
+            Directory.CreateDirectory(Path.GetDirectoryName(target));
+            File.Copy(file, target, true);
+            sourceFiles.Add((relative, new FileInfo(file).Length));
+            progress?.Report(relative);
+        }
+
+        var targetManifest = Manifest(destination).ToDictionary(x => x.Relative, x => x.Length);
+        foreach (var (relative, length) in sourceFiles)
+        {
+            if (!targetManifest.TryGetValue(relative, out long copied) || copied != length)
+                throw new IOException($"Файл не скопировался: {relative}");
+        }
+    }
+
+    private static bool IsInside(string child, string parent)
+    {
+        string c = Path.GetFullPath(child).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        string p = Path.GetFullPath(parent).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        return c.StartsWith(p, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Копирует всё в новую папку, проверяет копию и только потом удаляет старую.
+    /// Конфиг остаётся в BootstrapDir и переносу не подвергается.
+    /// </summary>
+    public static async Task ChangeDataRootAsync(string newRoot, IProgress<string> progress)
+    {
+        if (string.IsNullOrWhiteSpace(newRoot))
+            throw new ArgumentException("Путь не указан");
+
+        string target = Path.GetFullPath(newRoot.Trim());
+        string old = DataRoot;
+        if (string.Equals(old, target, StringComparison.OrdinalIgnoreCase))
+            return;
+
+        if (IsInside(target, old) || IsInside(old, target))
+            throw new InvalidOperationException(
+                "Новая папка не должна лежать внутри старой (и наоборот).");
+
+        Directory.CreateDirectory(target);
+
+        await Task.Run(() =>
+        {
+            progress?.Report("Копирование файлов...");
+            CopyTreeVerified(old, target, progress);
+        });
+
+        bool deleted = false;
+        await Task.Run(() =>
+        {
+            progress?.Report("Удаление старой папки...");
+            for (int attempt = 0; attempt < 3 && !deleted; attempt++)
+            {
+                try
+                {
+                    Directory.Delete(old, true);
+                    deleted = true;
+                }
+                catch (IOException)
+                {
+                    Thread.Sleep(250);
+                }
+                catch (UnauthorizedAccessException)
+                {
+                    Thread.Sleep(250);
+                }
+            }
+        });
+
+        Current.DataRoot = target;
+        EnsureDirectories();
+        Save();
+
+        if (!deleted)
+            throw new IOException(
+                $"Файлы скопированы, но старую папку удалить не удалось: {old}");
+    }
+
+    /// <summary>Сохраняет выбранные релизы и последнюю стратегию.</summary>
+    public static void SaveSelections() => Save();
+
+    /// <summary>Применяет изменённые настройки и сохраняет settings.json.</summary>
+    public static void Apply(AppSettings settings)
+    {
+        Current = settings ?? throw new ArgumentNullException(nameof(settings));
+        if (string.IsNullOrWhiteSpace(Current.DataRoot))
+            Current.DataRoot = DefaultDataRoot();
+        EnsureDirectories();
+        Save();
+    }
+
+    private static void Save()
+    {
+        Directory.CreateDirectory(BootstrapDir);
+        File.WriteAllText(SettingsPath, JsonSerializer.Serialize(Current, JsonOptions));
+    }
+}

@@ -1,0 +1,41 @@
+# Сборка и публикация
+bin/
+obj/
+dist/
+build-publish/
+build-updater/
+launcher.rc
+launcher.res
+
+# Генерируемые файлы C++ бэкенда
+cpp/*.a
+cpp/*.o
+cpp/fs_backend.dll
+*.pdb
+*.ilk
+*.exp
+*.lib
+
+# Данные, которые скачивает лаунчер
+releases/
+plugins/
+tg-ws-proxy/
+
+# IDE и локальные пользовательские файлы
+.vs/
+.vscode/
+*.user
+*.suo
+*.userprefs
+*.DotSettings.user
+TestResults/
+
+# Локальные эксперименты со сторонними исходниками zapret
+new/
+
+# Мусор ОС и временные файлы
+Thumbs.db
+desktop.ini
+.DS_Store
+*.tmp
+*.log
